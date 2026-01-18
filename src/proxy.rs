@@ -2,7 +2,10 @@ use std::sync::Arc;
 
 use tokio::{net::UdpSocket, time::Instant};
 
-use crate::config::ProxyConfig;
+use crate::{
+    config::ProxyConfig,
+    dns::{read_domain, write_sinkhole_response},
+};
 
 pub struct Proxy {
     config: ProxyConfig,
@@ -29,17 +32,26 @@ impl Proxy {
         println!("DNS proxy running on {addr}");
 
         loop {
-            let mut buf = [0; 4096];
+            let mut buf = [0; 512];
             let start = Instant::now();
             let (len, client_addr) = sock.recv_from(&mut buf).await?;
             println!("Received request from {}", client_addr);
 
-            let cloudflare = upstream_sock.clone();
-            let proxy = sock.clone();
+            let domain = read_domain(&buf[12..]);
+            println!("{domain}");
+            if self.config.blocklist.contains(&domain) {
+                println!("accessing blocked domain: {domain}");
+                write_sinkhole_response(&mut buf);
+                sock.send_to(&buf[..len], client_addr).await.unwrap();
+                continue;
+            }
+
+            let upstream_sock = upstream_sock.clone();
+            let sock = sock.clone();
             tokio::spawn(async move {
-                cloudflare.send(&buf[..len]).await.unwrap();
-                let (reply_len, _) = cloudflare.recv_from(&mut buf).await.unwrap();
-                proxy.send_to(&buf[..reply_len], client_addr).await.unwrap();
+                upstream_sock.send(&buf[..len]).await.unwrap();
+                let (reply_len, _) = upstream_sock.recv_from(&mut buf).await.unwrap();
+                sock.send_to(&buf[..reply_len], client_addr).await.unwrap();
                 println!("DNS request took {}ms", start.elapsed().as_millis())
             });
         }

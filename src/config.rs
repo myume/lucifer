@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -9,4 +11,5 @@ pub struct Config {
 pub struct ProxyConfig {
     pub port: Option<u16>,
     pub nameservers: Vec<String>,
+    pub blocklist: HashSet<String>,
 }

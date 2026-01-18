@@ -4,6 +4,7 @@ use tokio::fs::read_to_string;
 use crate::{config::Config, proxy::Proxy};
 
 mod config;
+pub mod dns;
 mod proxy;
 
 #[tokio::main]
