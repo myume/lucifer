@@ -16,9 +16,7 @@ pub fn read_domain(buf: &[u8]) -> String {
 pub fn write_sinkhole_response(buf: &mut [u8]) {
     buf[2] = 0x81;
     buf[3] = 0x83;
-    for byte in &mut buf[4..12] {
-        *byte = 0u8;
-    }
+    buf[4..12].iter_mut().for_each(|byte| *byte = 0);
     buf[5] = 1;
 }
 
