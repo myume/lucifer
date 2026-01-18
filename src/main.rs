@@ -12,6 +12,8 @@ async fn main() -> anyhow::Result<()> {
     let config: Config = toml::from_str(&read_to_string("./lucifer.toml").await?)
         .context("Failed to read config")?;
 
+    tracing_subscriber::fmt::init();
+
     let proxy = Proxy::new(config.proxy);
     proxy.start().await?;
 

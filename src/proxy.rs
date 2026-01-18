@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use tokio::{net::UdpSocket, time::Instant};
+use tracing::{debug, info, trace};
 
 use crate::{
     config::ProxyConfig,
@@ -29,18 +30,18 @@ impl Proxy {
                     .expect("nameservers not found")
             ))
             .await?;
-        println!("DNS proxy running on {addr}");
+        info!("DNS proxy running on {addr}");
 
         loop {
             let mut buf = [0; 512];
             let start = Instant::now();
             let (len, client_addr) = sock.recv_from(&mut buf).await?;
-            println!("Received request from {}", client_addr);
+            debug!("Received request from {}", client_addr);
 
             let domain = read_domain(&buf[12..]);
-            println!("{domain}");
+            debug!("DNS query for {domain}");
             if self.config.blocklist.contains(&domain) {
-                println!("accessing blocked domain: {domain}");
+                info!("accessing blocked domain: {domain}");
                 write_sinkhole_response(&mut buf);
                 sock.send_to(&buf[..len], client_addr).await.unwrap();
                 continue;
@@ -52,7 +53,7 @@ impl Proxy {
                 upstream_sock.send(&buf[..len]).await.unwrap();
                 let (reply_len, _) = upstream_sock.recv_from(&mut buf).await.unwrap();
                 sock.send_to(&buf[..reply_len], client_addr).await.unwrap();
-                println!("DNS request took {}ms", start.elapsed().as_millis())
+                trace!("DNS request took {}ms", start.elapsed().as_millis())
             });
         }
     }
