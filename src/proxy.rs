@@ -34,9 +34,9 @@ impl Proxy {
 
         loop {
             let mut buf = [0; 512];
-            let start = Instant::now();
             let (len, client_addr) = sock.recv_from(&mut buf).await?;
             debug!("Received request from {}", client_addr);
+            let start = Instant::now();
 
             let domain = read_domain(&buf[12..]);
             debug!("DNS query for {domain}");
