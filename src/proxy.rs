@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use anyhow::anyhow;
 use tokio::{net::UdpSocket, time::Instant};
@@ -6,7 +6,7 @@ use tracing::{debug, error, info, trace};
 
 use crate::{
     config::ProxyConfig,
-    dns::{read_domain, write_sinkhole_response},
+    dns::{DNS_HEADER_SIZE, read_domain, write_sinkhole_response},
 };
 
 pub struct Proxy {
@@ -25,8 +25,6 @@ impl Proxy {
 
         let addr = format!("127.0.0.1:{}", self.config.port.unwrap_or(53));
         let sock = Arc::new(UdpSocket::bind(&addr).await?);
-        let upstream_sock = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
-        upstream_sock.connect(format!("{}:53", nameserver)).await?;
         info!("DNS proxy running on {addr}");
 
         loop {
@@ -35,33 +33,43 @@ impl Proxy {
             debug!("Received request from {}", client_addr);
             let start = Instant::now();
 
-            let domain = read_domain(&buf[12..]);
+            let domain = read_domain(&buf[DNS_HEADER_SIZE..]);
             debug!("DNS query for {domain}");
             if self.config.blocklist.contains(&domain) {
                 info!("Accessing blocked domain: {domain}");
                 write_sinkhole_response(&mut buf);
-                if let Err(e) = sock.send_to(&buf[..len], client_addr).await {
+                if let Err(e) = sock.send_to(&buf[..DNS_HEADER_SIZE], client_addr).await {
                     error!("Failed to send response: {e}");
                 };
                 continue;
             }
 
-            let upstream_sock = upstream_sock.clone();
             let sock = sock.clone();
+            let nameserver = nameserver.clone();
             tokio::spawn(async move {
+                let Ok(upstream_sock) = UdpSocket::bind("0.0.0.0:0").await else {
+                    error!("Failed to create upstream socket");
+                    return;
+                };
+                if let Err(e) = upstream_sock.connect(format!("{}:53", nameserver)).await {
+                    error!("Failed to connect to upstream socket: {e}");
+                    return;
+                };
                 if let Err(e) = upstream_sock.send(&buf[..len]).await {
                     error!("Failed to send request to upstream: {e}");
                 }
-                match upstream_sock.recv_from(&mut buf).await {
-                    Ok((reply_len, _)) => {
+
+                match tokio::time::timeout(Duration::from_secs(5), upstream_sock.recv(&mut buf))
+                    .await
+                {
+                    Ok(Ok(reply_len)) => {
                         if let Err(e) = sock.send_to(&buf[..reply_len], client_addr).await {
                             error!("Failed to send response: {e}");
                         }
-                        trace!("DNS request took {}ms", start.elapsed().as_millis())
+                        trace!("DNS request took {}ms", start.elapsed().as_millis());
                     }
-                    Err(e) => {
-                        error!("Failed to get upstream response: {e}");
-                    }
+                    Ok(Err(e)) => error!("Failed to get upstream response: {e}"),
+                    Err(_) => error!("Upstream timed out for {client_addr}"),
                 }
             });
         }

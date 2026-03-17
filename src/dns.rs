@@ -1,10 +1,12 @@
+pub const DNS_HEADER_SIZE: usize = 12;
+
 pub fn read_domain(buf: &[u8]) -> String {
     let mut i = 0;
     let mut parts = vec![];
     while buf[i] > 0 {
         let length = buf[i] as usize;
         let part = &buf[i + 1..i + length + 1];
-        parts.push(str::from_utf8(part).expect("should be valid utf8"));
+        parts.push(String::from_utf8_lossy(part));
         i += length + 1;
     }
 
