@@ -10,3 +10,13 @@ serde = { version = "1.0", features = ["derive"] }
 toml = "0.9.8"
 tracing = "0.1"
 tracing-subscriber = "0.3"
+
+[lints.clippy]
+panic         = "deny"
+unwrap_used   = "deny"
+expect_used   = "warn"
+
+todo          = "warn"
+unimplemented = "warn"
+unreachable   = "warn"
+dbg_macro     = "warn"
