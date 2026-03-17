@@ -15,11 +15,26 @@ pub fn read_domain(buf: &[u8]) -> String {
 }
 
 // buf is the buf containing the query. we will write to the same buf
-pub fn write_sinkhole_response(buf: &mut [u8]) {
-    buf[2] = 0x85;
-    buf[3] = 0x83;
-    buf[4..12].iter_mut().for_each(|byte| *byte = 0);
-    buf[5] = 1;
+pub fn write_sinkhole_response(buf: &mut [u8], query_len: usize) -> usize {
+    // Header
+    buf[2] = 0x81; // QR=1, RD=1
+    buf[3] = 0x80; // RA=1, RCODE=0 (NOERROR)
+    buf[4..6].copy_from_slice(&[0x00, 0x01]); // QDCOUNT=1
+    buf[6..8].copy_from_slice(&[0x00, 0x01]); // ANCOUNT=1
+    buf[8..12].fill(0); // NSCOUNT, ARCOUNT = 0
+
+    // Echo question section back (bytes 12..query_len already in buf)
+    let ans = query_len;
+
+    // Answer section
+    buf[ans..ans + 2].copy_from_slice(&[0xc0, 0x0c]); // name pointer to offset 12
+    buf[ans + 2..ans + 4].copy_from_slice(&[0x00, 0x01]); // TYPE A
+    buf[ans + 4..ans + 6].copy_from_slice(&[0x00, 0x01]); // CLASS IN
+    buf[ans + 6..ans + 10].copy_from_slice(&[0x00, 0x00, 0x00, 0x00]); // TTL 0
+    buf[ans + 10..ans + 12].copy_from_slice(&[0x00, 0x04]); // RDLENGTH 4
+    buf[ans + 12..ans + 16].copy_from_slice(&[0x00, 0x00, 0x00, 0x00]); // 0.0.0.0
+
+    ans + 16
 }
 
 #[cfg(test)]

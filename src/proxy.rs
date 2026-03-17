@@ -37,26 +37,27 @@ impl Proxy {
             debug!("DNS query for {domain}");
             if self.config.blocklist.contains(&domain) {
                 info!("Accessing blocked domain: {domain}");
-                write_sinkhole_response(&mut buf);
-                if let Err(e) = sock.send_to(&buf[..DNS_HEADER_SIZE], client_addr).await {
+                let response_len = write_sinkhole_response(&mut buf, len);
+                if let Err(e) = sock.send_to(&buf[..response_len], client_addr).await {
                     error!("Failed to send response: {e}");
                 };
                 continue;
             }
 
             let sock = sock.clone();
-            let nameserver = nameserver.clone();
+            let nameserver = format!("{}:53", nameserver);
             tokio::spawn(async move {
                 let Ok(upstream_sock) = UdpSocket::bind("0.0.0.0:0").await else {
                     error!("Failed to create upstream socket");
                     return;
                 };
-                if let Err(e) = upstream_sock.connect(format!("{}:53", nameserver)).await {
+                if let Err(e) = upstream_sock.connect(nameserver).await {
                     error!("Failed to connect to upstream socket: {e}");
                     return;
                 };
                 if let Err(e) = upstream_sock.send(&buf[..len]).await {
                     error!("Failed to send request to upstream: {e}");
+                    return;
                 }
 
                 match tokio::time::timeout(Duration::from_secs(5), upstream_sock.recv(&mut buf))
