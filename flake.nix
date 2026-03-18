@@ -16,12 +16,14 @@
     packages = forAllSystems (pkgs: let
       inherit (pkgs.stdenv.hostPlatform) system;
     in {
-      package = pkgs.callPackage ./nix/package.nix {};
-      default = self.packages.${system}.package;
+      lucifer = pkgs.callPackage ./nix/package.nix {};
+      default = self.packages.${system}.lucifer;
     });
 
     devShells = forAllSystems (pkgs: {
       default = pkgs.callPackage ./nix/shell.nix {};
     });
+
+    nixosModules.lucifer = import ./nix/lucifer.nix self;
   };
 }
